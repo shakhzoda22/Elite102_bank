@@ -1,6 +1,14 @@
 # main file 
 import db
 import functions as f
+from flask import Flask
+mysql-connector-python
+Flask
+app = Flask(__name__)
+
+@app.route("/")
+def main():
+    return "<h1>Hello 123</h1>"
 
 import mysql.connector
 
@@ -139,5 +147,8 @@ def withdraw(uid: int, amount: float) -> bool:
 
 #Wire money between accounts
 def wire(sender: int, recipient: int, amount: float) -> bool:
-    pass
+    s = withdraw(sender, amount)
+    r = deposit(recipient, amount)
+
+    return s and r
 
