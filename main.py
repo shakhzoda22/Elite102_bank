@@ -1,250 +1,360 @@
+#I used numerous sources provided by Code2College to aid me in doing this Banking project: 
+#Using Tkinter https://www.youtube.com/watch?v=RFwTk4twaOI
+#Helping me with the Tkinter App setup https://www.youtube.com/watch?v=itRLRfuL_PQ
+#Johan Godinho's banking system video part 1 https://www.youtube.com/watch?v=itRLRfuL_PQ
+
+import tkinter as tk
 import mysql.connector
 
-# Define database credentials
-credentials = {
-    "user": "root",
-    "database": "Elite_102",
-    "password": "Nafisa@2008"
-}
+ # Connect to the MySQL database
+conn = mysql.connector.connect(
+    user="root",
+    database="elite_bank",
+    password="Nafisa@2008"
+)
+cursor = conn.cursor()
 
-# Create a database connection object
-connection = mysql.connector.connect(**credentials)
-connection.autocommit = False
 
-# Execute a raw query
-def execute(querytext, params=tuple()):
-    try:
-        cursor = connection.cursor()
-        cursor.execute(querytext, params)
-        data = [x for x in cursor]
-        cursor.close()
-        return (True, data)
-    except Exception as err:
-        cursor.close()
-        return (False, err)
+def search_user():
+    # Get the entered user ID
+    entered_username = user_id_entry.get()
 
-# Execute a select query
-def query(querytest, params=tuple()):
-    result = execute(querytest, params)
-    # If query fails, return err as is
-    # Otherwise, return structured data
-    if not result[0]:
-        return result
+    # Check if the user exists in the database
+    # query = f"SELECT * FROM users WHERE username = '{entered_username}'"
+    query = f"select * from users"
+    cursor.execute(query)
+    user = cursor.fetchone() 
+    breakpoint()
+
+
+    if user:
+        # Save the user ID and balance for future reference
+        global username, balance
+        username = user[0]
+        balance = user[3]
+
+        # Update the balance label
+        balance_label.config(text=f"Balance: ${balance}")
+
+        # Enable the transaction buttons
+        withdraw_button.config(state=tk.NORMAL)
+        deposit_button.config(state=tk.NORMAL)
     else:
-        return (True, [structure(x) for x in result[1]])
+        # Show an error message
+        error_label.config(text="User not found")
 
-# Turn tuples returned by MySQL into a dictionary
-def structure(raw):
-    keys = ["id", "username", "password", "balance", "admin"]
-    # Assign each tuple value to a key
-    dictionary = dict(zip(keys, list(raw)))
-    # Replace 1/0 booleans with Python booleans
-    dictionary["admin"] = bool(dictionary["admin"])
-    return dictionary
+def withdraw():
+    # Get the entered withdrawal amount
+    withdrawal_amount = float(withdraw_entry.get())
 
-# Register a new user
-def register(username, password):
-    result = execute('INSERT INTO users (username, password, balance, admin) VALUES (%s, %s, 0, false);', (username, password))
-    connection.commit()
-    return result[0]
+    if balance >= withdrawal_amount:
+        # Update the balance
+        balance -= withdrawal_amount
+        query = f"UPDATE users SET balance = {balance} WHERE id = {user_id}"
+        cursor.execute(query)
+        conn.commit()
 
-# Login to an account
-def login(username, password):
-    user = query("SELECT * FROM users WHERE username=%s", (username,))
-    # Error or nonexistent user
-    if not user[0] or not user[1]:
-        return False
+        # Update the balance label
+        balance_label.config(text=f"Balance: ${balance}")
     else:
-        return password == user[1][0]["password"]
+        error_label.config(text="Insufficient funds")
 
-# Get user ID from username
-def getid(username):
-    user = query("SELECT * FROM users WHERE username=%s", (username,))
-    # Error or no user found
-    if not user[0] or not user[1]:
-        return -1
-    else:
-        return user[1][0]["id"]
+def deposit():
+    # Get the entered deposit amount
+    deposit_amount = float(deposit_entry.get())
 
-# Delete account
-def delete_account(username, password):
-    # Make sure user is authenticated to delete account
-    if not login(username, password):
-        return False
-    q = execute("DELETE FROM users WHERE username=%s", (username,))
-    connection.commit()
-    return q[0]
+    # Update the balance
+    balance += deposit_amount
+    query = f"UPDATE users SET balance = {balance} WHERE id = {user_id}"
+    cursor.execute(query)
+    conn.commit()
 
-# Change username
-def username_change(uid, newname, password):
-    q = execute("UPDATE users SET username=%s WHERE id=%s AND password=%s", (newname, uid, password))
-    connection.commit()
-    return q[0]
+    # Update the balance label
+    balance_label.config(text=f"Balance: ${balance}")
 
-# Change password
-def change_password(uid, oldpass, newpass):
-    q = query("SELECT * FROM users WHERE id=%s AND password=%s", (uid, oldpass))
-    if not q[0] or not q[1]:
-        return False
-    q = execute("UPDATE users SET password=%s WHERE id=%s AND password=%s", (newpass, uid, oldpass))
-    connection.commit()
-    return q[0]
+# Create the main window 
+root = tk.Tk()
+root.title("Banking System")
 
-# Check balance
-def balance(uid):
-    b = query("SELECT * FROM users WHERE id=%s", (uid,))
-    if not b[0] or not b[1]:
-        return float(0)
-    else:
-        return b[1][0]["balance"]
+frame = tk.Frame(root, bg='#3e646c')
+frame.place(relwidth=0.8, relheight=0.9, rely=0.1, relx=0.1 )
 
-#Withdraw money
-def withdraw (uid, amount): 
-    deposit(uid, 0 - amount)
+# Create and place the user ID form widgets
+user_id_label = tk.Label(root, text="User ID:")
+user_id_label.pack()
+user_id_entry = tk.Entry(root)
+user_id_entry.pack()
 
+search_button = tk.Button(root, text="Search", command=search_user)
+search_button.pack()
 
-#Wire money between accounts
-def wire(sender, recipient, amount) :
-    s = withdraw(sender, amount)
-    r = deposit(recipient, amount)
+# Create and place the withdrawal form widgets
+withdraw_label = tk.Label(root, text="Withdraw Amount:")
+withdraw_label.pack()
+withdraw_entry = tk.Entry(root)
+withdraw_entry.pack()
 
-    return s and r
+withdraw_button = tk.Button(root, text="Withdraw", command=withdraw, state=tk.DISABLED)
+withdraw_button.pack()
 
-# Deposit money
-def deposit(uid, amount):
-    bal = balance
+# Create and place the deposit form widgets
+deposit_label = tk.Label(root, text="Deposit Amount:")
+deposit_label.pack()
+deposit_entry = tk.Entry(root)
+deposit_entry.pack()
 
+deposit_button = tk.Button(root, text="Deposit", command=deposit, state=tk.DISABLED)
+deposit_button.pack()
 
-def main():
-    while True:
-        action = input("What do you want to do?").lower().strip()
-        if action == "login":
-            username = input("Username: ")
-            password = input("Password: ")
-            success = login(username, password)
-            if success:
-                print("Success")
-            else:
-                print("Login Failed")
+# Create and place the balance label
+balance_label = tk.Label(root, text='balance: ')
+balance_label.pack()
+
+# Create and place the error message label
+error_label = tk.Label(root, text='')
+error_label.pack()
+
+root.mainloop()
+
+conn.close()
 
 
+# import tkinter as tk
+# import mysql.connector
+
+#  # Connect to the MySQL database
+# conn = mysql.connector.connect(
+#     user="root",
+#     database="elite_bank",
+#     password="Nafisa@2008"
+# )
+# cursor = conn.cursor()
+
+# def login():
+#     # Get the entered username and password
+#     entered_username = username_entry.get()
+#     entered_password = password_entry.get()
+
+#     # Check if the user exists in the database
+#     query = f"SELECT * FROM users WHERE username = '{entered_username}' AND password = '{entered_password}'"
+#     cursor.execute(query)
+#     user = cursor.fetchone()
+
+#     if user:
+#         # Save the user ID and balance for future reference
+#         global user_id, balance
+#         user_id = user[0]
+#         balance = user[3]
+
+#         # Update the balance label
+#         balance_label.config(text=f"Balance: ${balance}")
+
+#         # Enable the transaction buttons
+#         transfer_button.config(state=tk.NORMAL)
+#         check_balance_button.config(state=tk.NORMAL)
+#     else:
+#         # Show an error message
+#         error_label.config(text="Invalid username or password")
+
+# def transfer():
+#     # Get the entered recipient username and transfer amount
+#     recipient_username = recipient_entry.get()
+#     transfer_amount = int(amount_entry.get())
+
+#     # Check if the recipient exists in the database
+#     query = f"SELECT * FROM users WHERE username = '{recipient_username}'"
+#     cursor.execute(query)
+#     recipient = cursor.fetchone()
+
+#     if recipient:
+#         recipient_id = recipient[0]
+#         recipient_balance = recipient[3]
+
+#         if balance >= transfer_amount:
+#             # Update the sender's balance
+#             balance -= transfer_amount
+#             query = f"UPDATE users SET balance = {balance} WHERE id = {user_id}"
+#             cursor.execute(query)
+
+#             # Update the recipient's balance
+#             recipient_balance += transfer_amount
+#             query = f"UPDATE users SET balance = {recipient_balance} WHERE id = {recipient_id}"
+#             cursor.execute(query)
+
+#             # Commit the changes to the database
+#             conn.commit()
+
+#             # Update the balance label
+#             balance_label.config(text=f"Balance: ${balance}")
+#         else:
+#             error_label.config(text="Insufficient funds")
+#     else:
+#         error_label.config(text="Recipient not found")
+
+# def check_balance():
+#     balance_label.config(text=f"Balance: ${balance}")
+
+# # Create the main root
+# root = tk.Tk()
+# root.title("WELCOME TO THE BANK")
+
+# frame = tk.Frame(root, bg='#3e646c')
+# frame.place(relwidth=0.8, relheight=0.9, rely=0.1, relx=0.1 )
+
+
+# # Create and place the login form widgets
+# username_label = tk.Label(root, text="Username:")
+# username_label.pack()
+# username_entry = tk.Entry(root)
+# username_entry.pack()
+
+# password_label = tk.Label(root, text="Password:")
+# password_label.pack()
+# password_entry = tk.Entry(root, show="*")
+# password_entry.pack()
+
+# login_button = tk.Button(root, text="Login", command=login)
+# login_button.pack()
+
+# # Create and place the transaction form widgets
+# recipient_label = tk.Label(root, text="Recipient:")
+# recipient_label.pack()
+# recipient_entry = tk.Entry(root)
+# recipient_entry.pack()
+
+# amount_label = tk.Label(root, text="Amount:")
+# amount_label.pack()
+# amount_entry = tk.Entry(root)
+# amount_entry.pack()
+
+# transfer_button = tk.Button(root, text="Transfer", command=transfer, state=tk.DISABLED)
+# transfer_button.pack()
+
+# check_balance_button = tk.Button(root, text="Check Balance", command=check_balance, state=tk.DISABLED)
+# check_balance_button.pack()
+
+#  # Create and place the balance label
+# balance_label = tk.Label(root, text='balance: ')
+# balance_label.pack()
+
+# root.mainloop()
+
+# conn.close()
 
 # import mysql.connector
 
+# connection = mysql.connector.connect(user = "root", database = "elite_bank", password="Nafisa@2008")
 
-# credentials = {
-#     "user": "root",
-#     "database": "Elite_102",
-#     "password": "Nafisa@2008"
-# }
+# import tkinter as tk
+# import sqlite3
 
-# connection = mysql.connector.connect(**credentials)
-# connection.autocommit = False
+# # Connect to the SQLite database
+# conn = sqlite3.connect('elite_bank.db')
+# cursor = conn.cursor()
 
+# def login():
+#     # Get the entered username and password
+#     entered_username = username_entry.get()
+#     entered_password = password_entry.get()
 
+#     # Check if the user exists in the database
+#     query = f"SELECT * FROM users WHERE username = '{entered_username}' AND password = '{entered_password}'"
+#     cursor.execute(query)
+#     user = cursor.fetchone()
 
-# #Execute a raw query
-# def execute(querytext, params = tuple()):
-#     try:
-#         cursor = connection.cursor()
+#     if user:
+#         # Save the user ID and balance for future reference
+#         global user_id, balance
+#         user_id = user[0]
+#         balance = user[3]
 
-#         cursor.execute(querytext, params)
+#         # Update the balance label
+#         balance_label.config(text=f"Balance: ${balance}")
 
-#         data = [x for x in cursor]
-
-#         cursor.close()
-#         return (True, data)
-#     except Exception as err:
-#         cursor.close()
-#         return (False, err)
-    
-# #Execute a select query
-# def query(querytest, params = tuple()):
-#     result = execute(querytest, params)
-
-#     #If query fails, return err as is
-#     #Otherwise, return structured data
-#     if not result[0]:
-#         return result
+#         # Enable the transaction buttons
+#         transfer_button.config(state=tk.NORMAL)
+#         check_balance_button.config(state=tk.NORMAL)
 #     else:
-#         return (True, [structure(x) for x in result[1]])
-    
+#         # Show an error message
+#         error_label.config(text="Invalid username or password")
 
-# #Turn tuples returned by MySQL into a dictionary
-# def structure(raw):
-#     keys = ["id", "username", "password", "balance", "admin"]
+# def transfer():
+#     # Get the entered recipient username and transfer amount
+#     recipient_username = recipient_entry.get()
+#     transfer_amount = int(amount_entry.get())
 
-#     #Assign each tupe value to a key
-#     dictionary = dict(
-#         zip(keys, list(raw))
-#     )
+#     # Check if the recipient exists in the database
+#     query = f"SELECT * FROM users WHERE username = '{recipient_username}'"
+#     cursor.execute(query)
+#     recipient = cursor.fetchone()
 
-#     #Replease 1/0 booleans with Python booleans
-#     if dictionary["admin"] == 1:
-#         dictionary["admin"] = True
+#     if recipient:
+#         recipient_id = recipient[0]
+#         recipient_balance = recipient[3]
+
+#         if balance >= transfer_amount:
+#             # Update the sender's balance
+#             balance -= transfer_amount
+#             query = f"UPDATE users SET balance = {balance} WHERE id = {user_id}"
+#             cursor.execute(query)
+
+#             # Update the recipient's balance
+#             recipient_balance += transfer_amount
+#             query = f"UPDATE users SET balance = {recipient_balance} WHERE id = {recipient_id}"
+#             cursor.execute(query)
+
+#             # Commit the changes to the database
+#             conn.commit()
+
+#             # Update the balance label
+#             balance_label.config(text=f"Balance: ${balance}")
+#         else:
+#             error_label.config(text="Insufficient funds")
 #     else:
-#         dictionary["admin"] = False
+#         error_label.config(text="Recipient not found")
 
-#     return dictionary
+# def check_balance():
+#     balance_label.config(text=f"Balance: ${balance}")
 
-# def register(username, password):
-#     result = execute(f'insert into users (username, password, balance, admin) values (%s, %s, 0, false);', (username, password))
-#     print(result)
+# # Create the main root
+# root = tk.Tk()
+# root.title("WELCOME TO THE BANK")
 
-#     connection.commit()
-#     return result[0]
+# # Create and place the login form widgets
+# username_label = tk.Label(root, text="Username:")
+# username_label.pack()
+# username_entry = tk.Entry(root)
+# username_entry.pack()
 
-# #Login to an account
-# def login(username, password):
-#     #Find the user trying to log in
-#     user = query("select * from users where username=%s", (username,))
-#     print(user)
+# password_label = tk.Label(root, text="Password:")
+# password_label.pack()
+# password_entry = tk.Entry(root, show="*")
+# password_entry.pack()
 
-#     #Error or nonexistent user
-#     if not user[0] or len(user[1]) < 1:
-#         return False
-#     else:
-#         return password == user[1][0]["password"]
+# login_button = tk.Button(root, text="Login", command=login)
+# login_button.pack()
 
-# #Get user ID from username
-# def getid(username):
-#     user = query("select * from users where username=%s", (username,))
-    
-#     #Error or no user found
-#     if not user[0] or len(user[1]) < 1:
-#         return -1
-#     else:
-#         return user[1][0]["id"]
+# # Create and place the transaction form widgets
+# recipient_label = tk.Label(root, text="Recipient:")
+# recipient_label.pack()
+# recipient_entry = tk.Entry(root)
+# recipient_entry.pack()
 
-# #Delete account
-# def delete_account(username, password):
-#     #make sure user is authenticated to delete account
-#     if not login(username, password):
-#         return False
-    
-#     q = execute("delete from users where username=%s", (username,))
-#     connection.commit()
+# amount_label = tk.Label(root, text="Amount:")
+# amount_label.pack()
+# amount_entry = tk.Entry(root)
+# amount_entry.pack()
 
-#     return q[0]
+# transfer_button = tk.Button(root, text="Transfer", command=transfer, state=tk.DISABLED)
+# transfer_button.pack()
 
-# #Change username
-# def username_change (uid, newname, password) :
-#     q = execute("update users set username=%s where id=%s", (newname, uid))
-#     connection.commit()
+# check_balance_button = tk.Button(root, text="Check Balance", command=check_balance, state=tk.DISABLED)
+# check_balance_button.pack()
 
-#     return q[0]
+# # Create and place the balance label
+# balance_label = tk.Label(root, text='balance: ')
+# balance_label.pack()
 
-# def change_password(uid, oldpass, newpass) :
-#     q = query("select * from users where id=%s and password=%s", (uid, oldpass))
-#     if not q[0]:
-#         return False
-#     q = execute("update users set password=%s where id=%s and password=%s", (newpass, uid, oldpass))
-#     connection.commit()
+# root.mainloop()
 
-# #Check balance
-# def balance(uid):
-#     b = query("select * from users where id=%s", (uid, ))
-#     if not b[0]:
-#         return float(0)
-#     else:
-#         return b[1][0]["balance"]
+# conn.close()
